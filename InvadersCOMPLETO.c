@@ -169,7 +169,7 @@ void update_nave(Nave *nave) {
 //inicia a posicao inicial de cada alien individualmente na matriz, com ponteiros para a struct, que definem a posicao exata e cor
 void initAlien(Alien *alien, int i, int j) {
     alien->x = 10 + j*(ALIEN_W + 80);
-    alien->y = 10 + i*(ALIEN_H + 20);
+    alien->y = 10 + i*(ALIEN_H + 30);
     alien->y_vel = ALIEN_H;
     alien->vivo = 1;
     alien->cor = al_map_rgb(rand()%256, rand()%256, rand()%256);
@@ -224,12 +224,21 @@ void update_aliens(Alien aliens[5][5]) {
 }
 
 //verifica colisao de alien com o solo
-int colisao_alien_solo(Alien alien) {
+int colisao_alien_solo(Alien alien, Nave nave) {
     float y_base_nave = SCREEN_H - 0.8 * EARTH_H;
     float topo_nave = y_base_nave - NAVE_H / 1.2;
+    float nave_esq = nave.x - NAVE_W / 2;
+    float nave_dir = nave.x + NAVE_W / 2;
 
     if (alien.y + ALIEN_H > SCREEN_H - EARTH_H || alien.y + ALIEN_H >= topo_nave)
         return 1;
+
+    int colidiu_verticalmente = (alien.y + ALIEN_H >= topo_nave);
+    int colidiu_horizontalmente = (alien.x + ALIEN_W >= nave_esq && alien.x <= nave_dir);
+
+    if (colidiu_verticalmente && colidiu_horizontalmente)
+        return 1;
+
     return 0;
 }
 
@@ -672,7 +681,7 @@ int main() {
                     // se algum alien chegou no chão ou bateu na nave, game over
                     for (int i=0; i<5; i++) {
                         for (int j=0; j<5; j++) {
-                            if (aliens[i][j].vivo && colisao_alien_solo(aliens[i][j])) {
+                            if (aliens[i][j].vivo && colisao_alien_solo(aliens[i][j], nave)) {
                                 al_flip_display();
 				                //faz ou fade-out do jogo pra tela de game over
 				                for (float alpha = 0; alpha <= 1.0; alpha += 0.05) {
