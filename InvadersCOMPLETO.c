@@ -42,6 +42,7 @@ const char *RECORD_FILE = "recorde.txt";
 #define ESCOLHENDO_DIFICULDADE 2
 #define JOGANDO 3
 #define GAME_OVER 4
+#define VITORIA 5
 
 // DEFINES DE DIFICULDADE
 #define FACIL 1
@@ -95,6 +96,8 @@ typedef struct {
 // VARIÁVEIS GLOBAIS
 int missoes_completas = 0;
 int aliens_eliminados = 0;
+//variavel para estabelecer o inicio do jogo como 0s decorridos
+int tempo_jogo = 0;
 int estado_jogo = MENU;
 int dificuldade = FACIL;
 int nave_selecionada = NAVE_A;
@@ -102,6 +105,7 @@ int tipo_powerup_ativo = TIRO_RAPIDO;
 int podeAtirar = 1;
 int fase_atual = 1;
 int recorde = 0;
+int novo_recorde_atingido = 0; 
 int tempo_missao = 30;
 int aliens_objetivo = 10;
 
@@ -127,6 +131,26 @@ int cores_cenario[TOTAL_FASES][3] = {
 float aliens_x_vel = 3; // velocidade alien padrão, mudará pela dificuldade
 
 /////////////////// FUNÇÕES BASE DO JOGO ///////////////////
+
+void carregar_recorde() {
+    FILE *arq = fopen(RECORD_FILE, "r");
+    if (arq) {
+        fscanf(arq, "%d", &recorde);
+        fclose(arq);
+    } else {
+        recorde = 0; // se não existir o arquivo
+    }
+}
+
+void salvar_recorde() {
+    FILE *arq = fopen(RECORD_FILE, "w"); // Abre o arquivo para escrita, sobrescrevendo-o
+    if (arq) {
+        fprintf(arq, "%d", recorde); // Escreve o valor do recorde no arquivo
+        fclose(arq);
+    } else {
+        fprintf(stderr, "Erro ao salvar o recorde no arquivo!\n");
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////// NAVE
 
@@ -419,8 +443,6 @@ int todos_os_aliens_mortos(Alien aliens[5][5]) {
 ////////////////////////////////////////////////////////////////////////////////// MISSOES E FASES
 
 void resetar_missao() {
-    aliens_eliminados = 0;
-    tempo_jogo_segundos = 0;
     aliens_objetivo = 10 + fase_atual * 5;
     tempo_missao = 30 - (fase_atual/3)*5;
     if (tempo_missao < 10) tempo_missao = 10;
@@ -466,19 +488,19 @@ void atualizar_tempo_missao(ALLEGRO_TIMER *timer) {
     }
 }
 
+
 void verificar_missao() {
-    if (tempo_jogo_segundos >= tempo_missao) {
-        if (!todos_os_aliens_mortos(aliens)) {
-            // Tempo acabou e ainda tem aliens vivos: Game Over
-            estado_jogo = GAME_OVER;
-        }
-    }
 
     if (todos_os_aliens_mortos(aliens)) {
         missoes_completas++;  // incrementa aqui
         fase_atual++;
         if (fase_atual > TOTAL_FASES) {
-            estado_jogo = MENU;
+            if (aliens_eliminados > recorde) {
+                recorde = aliens_eliminados;
+                novo_recorde_atingido = 1;
+                salvar_recorde();
+            }
+            estado_jogo = VITORIA; 
             fase_atual = 1;
         } else {
             resetar_missao();
@@ -487,7 +509,30 @@ void verificar_missao() {
 }
 
 
-////////////////////// TELAS /////////////////////////
+////////////////////// TELAS e VOIDS /////////////////////////
+
+
+void resetar_ao_voltar_menu() {
+    aliens_eliminados = 0;
+    tempo_jogo = 0;
+    tempo_jogo_segundos = 0;
+    powerup_ativo = 0;
+    tempo_powerup_ativo = 0;
+}
+
+void resetar_jogo(Nave *nave) {
+    fase_atual = 1;
+    aliens_eliminados = 0;
+    tempo_jogo = 0;
+    tempo_jogo_segundos = 0;
+    powerup_ativo = 0;
+    tipo_powerup_ativo = TIRO_RAPIDO;
+    tempo_powerup_ativo = 0;
+    missoes_completas = 0;
+    podeAtirar = 1;
+    initNave(nave);
+    resetar_missao(); // já reinicia aliens, tiros, etc
+}
 
 void desenhar_menu(ALLEGRO_FONT *fonte) {
     al_clear_to_color(al_map_rgb(0, 0, 0));
@@ -495,10 +540,16 @@ void desenhar_menu(ALLEGRO_FONT *fonte) {
     al_draw_text(fonte, al_map_rgb(200, 200, 200), SCREEN_W/2, 180, ALLEGRO_ALIGN_CENTER, "Pressione 1 para Jogar");
     al_draw_text(fonte, al_map_rgb(200, 200, 200), SCREEN_W/2, 220, ALLEGRO_ALIGN_CENTER, "Pressione ESC para Sair");
     char texto[64];
-    int missoes_completas = fase_atual - 1;
+    missoes_completas = fase_atual - 1;
     if (missoes_completas < 0) missoes_completas = 0; // segurança
     sprintf(texto, "Missões completas: %d / %d", missoes_completas, TOTAL_FASES);
     al_draw_text(fonte, al_map_rgb(255, 255, 0), SCREEN_W/2, 260, ALLEGRO_ALIGN_CENTER, texto);
+
+    // Recorde atual (em destaque)
+    char recorde_texto[64];
+    sprintf(recorde_texto, "RECORDE: %d ALIENS", recorde);
+    al_draw_text(fonte, al_map_rgb(255, 215, 0), SCREEN_W/2, 300, ALLEGRO_ALIGN_CENTER, recorde_texto);
+
     al_flip_display();
 }
 
@@ -522,11 +573,47 @@ void desenhar_selecao_dificuldade(ALLEGRO_FONT *fonte) {
 
 void desenhar_game_over(ALLEGRO_FONT *fonte) {
     al_clear_to_color(al_map_rgb(100, 0, 0));
-    al_draw_text(fonte, al_map_rgb(255, 255, 255), SCREEN_W/2, SCREEN_H/2 - 40, ALLEGRO_ALIGN_CENTER, "GAME OVER!");
+
+    al_draw_text(fonte, al_map_rgb(255, 255, 255), SCREEN_W/2, SCREEN_H/2 - 120, ALLEGRO_ALIGN_CENTER, "GAME OVER!");
+
     char buffer[128];
     sprintf(buffer, "Você eliminou %d aliens.", aliens_eliminados);
-    al_draw_text(fonte, al_map_rgb(255, 255, 255), SCREEN_W/2, SCREEN_H/2, ALLEGRO_ALIGN_CENTER, buffer);
-    al_draw_text(fonte, al_map_rgb(200, 200, 200), SCREEN_W/2, SCREEN_H/2 + 40, ALLEGRO_ALIGN_CENTER, "Pressione ENTER para voltar ao menu.");
+    al_draw_text(fonte, al_map_rgb(255, 255, 255), SCREEN_W/2, SCREEN_H/2 - 80, ALLEGRO_ALIGN_CENTER, buffer);
+
+    sprintf(buffer, "Tempo de jogo: %ds", tempo_jogo_segundos);
+    al_draw_text(fonte, al_map_rgb(255, 255, 255), SCREEN_W/2, SCREEN_H/2 - 50, ALLEGRO_ALIGN_CENTER, buffer);
+
+    al_draw_text(fonte, al_map_rgb(200, 200, 200), SCREEN_W/2, SCREEN_H/2 + 30, ALLEGRO_ALIGN_CENTER, "Pressione ENTER para voltar ao menu.");
+
+    al_flip_display();
+}
+
+
+void desenhar_vitoria(ALLEGRO_FONT *fonte) {
+    al_clear_to_color(al_map_rgb(0, 100, 0));
+
+    al_draw_text(fonte, al_map_rgb(255, 255, 255),
+                 SCREEN_W / 2, SCREEN_H / 2 - 80,
+                 ALLEGRO_ALIGN_CENTER, "VOCÊ VENCEU!");
+
+    char texto_aliens[64];
+    sprintf(texto_aliens, "Aliens eliminados: %d", aliens_eliminados);
+    al_draw_text(fonte, al_map_rgb(255, 255, 255),
+                 SCREEN_W / 2, SCREEN_H / 2 - 40,
+                 ALLEGRO_ALIGN_CENTER, texto_aliens);
+
+
+    char texto_tempo[64];
+    sprintf(texto_tempo, "Tempo: %ds", tempo_jogo_segundos);
+    al_draw_text(fonte, al_map_rgb(255, 255, 255),
+                 SCREEN_W / 2, SCREEN_H / 2,
+                 ALLEGRO_ALIGN_CENTER, texto_tempo);
+
+
+    al_draw_text(fonte, al_map_rgb(200, 200, 200),
+                 SCREEN_W / 2, SCREEN_H / 2 + 40,
+                 ALLEGRO_ALIGN_CENTER, "Pressione ENTER para voltar ao menu.");
+
     al_flip_display();
 }
 
@@ -542,10 +629,9 @@ void draw_scenario(){
 
 ///////////////////////// MAIN ///////////////////////////////
 
-//variavel para estabelecer o inicio do jogo como 0s decorridos
-int tempo_jogo = 0;
-
 int main() {
+
+    carregar_recorde();
 
 	ALLEGRO_EVENT_QUEUE *fila_eventos = NULL;
     ALLEGRO_TIMER *timer = NULL;
@@ -633,6 +719,7 @@ int main() {
     //inicia o temporizador
     al_start_timer(timer);
 
+
     //inits de nave, aliens e tiros
     Nave nave;
     initNave(&nave);
@@ -683,6 +770,13 @@ int main() {
                         for (int j=0; j<5; j++) {
                             if (aliens[i][j].vivo && colisao_alien_solo(aliens[i][j], nave)) {
                                 al_flip_display();
+
+                                if (aliens_eliminados > recorde) {
+                                    recorde = aliens_eliminados;
+                                    novo_recorde_atingido = 1;
+                                    salvar_recorde(); // Chama a função para salvar o novo recorde
+                                }
+
 				                //faz ou fade-out do jogo pra tela de game over
 				                for (float alpha = 0; alpha <= 1.0; alpha += 0.05) {
 					                // redesenha o fundo e a nave/aliens/etc 
@@ -695,15 +789,21 @@ int main() {
 
     				                al_flip_display();
     				                al_rest(0.01); 
+                                    
                                 }
                                 estado_jogo = GAME_OVER;
+
                             }
                         }
                     }
                     break;
 
                 case GAME_OVER:
-                    // nada a atualizar
+                    //nada a atualizar
+                    break;
+
+                case VITORIA:
+                    //nada a atualizar
                     break;
             }
         }
@@ -740,15 +840,15 @@ int main() {
                 case ESCOLHENDO_DIFICULDADE:
                     if (evento.keyboard.keycode == ALLEGRO_KEY_1) {
                         dificuldade = FACIL;
-                        resetar_missao();
+                        resetar_jogo(&nave);
                         estado_jogo = JOGANDO;
                     } else if (evento.keyboard.keycode == ALLEGRO_KEY_2) {
                         dificuldade = MEDIO;
-                        resetar_missao();
+                        resetar_jogo(&nave);
                         estado_jogo = JOGANDO;
                     } else if (evento.keyboard.keycode == ALLEGRO_KEY_3) {
                         dificuldade = DIFICIL;
-                        resetar_missao();
+                        resetar_jogo(&nave);
                         estado_jogo = JOGANDO;
                     }
                     break;
@@ -761,12 +861,23 @@ int main() {
                         podeAtirar = 0;
                     }
                     if (evento.keyboard.keycode == ALLEGRO_KEY_ESCAPE) {
+                        resetar_ao_voltar_menu();
                         estado_jogo = MENU;
                     }
                     break;
 
                 case GAME_OVER:
+
                     if (evento.keyboard.keycode == ALLEGRO_KEY_ENTER) {
+                        resetar_ao_voltar_menu(); 
+                        estado_jogo = MENU;
+                    }
+                    break;
+                
+                case VITORIA:
+                    if (evento.keyboard.keycode == ALLEGRO_KEY_ENTER) {
+
+                        resetar_ao_voltar_menu();
                         estado_jogo = MENU;
                     }
                     break;
@@ -809,6 +920,10 @@ int main() {
                 case GAME_OVER:
                     desenhar_game_over(fonte);
                     break;
+
+                case VITORIA: 
+                    desenhar_vitoria(fonte);
+                    break;
             }
         }
     }
@@ -819,6 +934,7 @@ int main() {
     al_destroy_timer(timer);
     al_destroy_event_queue(fila_eventos);
     al_destroy_sample(musica);
+    al_destroy_sample_instance(musicaInstance);
 
     return 0;
 }
