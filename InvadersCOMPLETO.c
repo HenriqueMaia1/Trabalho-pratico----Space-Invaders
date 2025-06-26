@@ -99,8 +99,6 @@ int estado_jogo = MENU;
 int dificuldade = FACIL;
 int nave_selecionada = NAVE_A;
 int tipo_powerup_ativo = TIRO_RAPIDO;
-
-//inteiro que libera tiros, que comeca como 1 por padrao
 int podeAtirar = 1;
 int fase_atual = 1;
 int recorde = 0;
@@ -285,8 +283,13 @@ void update_tiros(Tiro tiros[], Alien aliens[5][5], Nave nave) {
                                         powerups[p].ativo = 1;
                                         powerups[p].x = px;
                                         powerups[p].y = py;
-                                        powerups[p].tipo = (rand() % 2 == 0) ? TIRO_RAPIDO : TIRO_DUPLO;
-                                        break;
+                                        if (rand() % 2 == 0) {
+                                            powerups[p].tipo = TIRO_RAPIDO;
+                                        } 
+                                        else {
+                                            powerups[p].tipo = TIRO_DUPLO;
+                                        }
+                                    break;
                                     }
                                 }
                             }
@@ -348,7 +351,13 @@ void atualizar_powerups(Nave nave) {
 void desenhar_powerups() {
     for (int i=0; i<MAX_POWERUPS; i++) {
         if (powerups[i].ativo) {
-            ALLEGRO_COLOR cor = (powerups[i].tipo == TIRO_RAPIDO) ? al_map_rgb(255, 255, 0) : al_map_rgb(0, 255, 255);
+            ALLEGRO_COLOR cor;
+            if (powerups[i].tipo == TIRO_RAPIDO) {
+                cor = al_map_rgb(255, 255, 0);
+            } 
+            else {
+                cor = al_map_rgb(0, 255, 255);
+            }           
             al_draw_filled_circle(powerups[i].x, powerups[i].y, 10, cor);
         }
     }
@@ -429,7 +438,12 @@ void desenhar_missao(ALLEGRO_FONT *fonte) {
 
     if (powerup_ativo) {
         char pwr[64];
-        sprintf(pwr, "Power-up ativo: %s (%ds)", tipo_powerup_ativo == TIRO_RAPIDO ? "Tiro Rápido" : "Tiro Duplo", tempo_powerup_ativo);
+        if (tipo_powerup_ativo == TIRO_RAPIDO) {
+            sprintf(pwr, "Power-up ativo: %s (%ds)", "Tiro Rápido", tempo_powerup_ativo);
+        } 
+        else {
+            sprintf(pwr, "Power-up ativo: %s (%ds)", "Tiro Duplo", tempo_powerup_ativo);
+        }
         al_draw_text(fonte, al_map_rgb(255, 255, 0), 10, 50, 0, pwr);
     }
 }
@@ -518,6 +532,9 @@ void draw_scenario(){
 }
 
 ///////////////////////// MAIN ///////////////////////////////
+
+//variavel para estabelecer o inicio do jogo como 0s decorridos
+int tempo_jogo = 0;
 
 int main() {
 
@@ -642,6 +659,10 @@ int main() {
                     break;
 
                 case JOGANDO:
+                	//relogio de tempo de jogo na tela
+			        if(al_get_timer_count(timer) % (int)FPS == 0) {
+    			        tempo_jogo++;
+			        }
                     update_nave(&nave);
                     update_aliens(aliens);
                     update_tiros(tiros, aliens, nave);
@@ -770,6 +791,10 @@ int main() {
                     draw_aliens(aliens);
                     draw_tiros(tiros);
                     desenhar_powerups();
+                    //escrita do relogio
+			        char tempo_texto[64];
+			        sprintf(tempo_texto, "Tempo: %ds", tempo_jogo);
+			        al_draw_text(fonte, al_map_rgb(255,255,255), SCREEN_W - 10, SCREEN_H - 25, ALLEGRO_ALIGN_RIGHT, tempo_texto);
                     al_flip_display();
                     break;
                 case GAME_OVER:
